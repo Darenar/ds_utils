@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.graphics.tsaplots import acf, pacf
 import plotly.graph_objects as go
+import plotly.express as px
 
 from ..preprocessing_utils import EllipseShape
 
@@ -186,3 +188,42 @@ def plot_spread_graph_with_shaded_areas(input_df: pd.DataFrame, column_one: str,
     )
     return fig
     
+
+def plot_base_autocorrelation(data: np.ndarray, title: str = None, conf_value: float = 0.05):
+    """
+    Function to plot value in the ACF, PACF formats.
+    Each value correspond to a dot with a vertical line to it. 
+    Automatically plots 
+    Parameters
+    ----------
+    data : np.ndarray
+        Array with values to plot
+    title : str, optional
+        Title of the results figure, by default None
+    conf_value: float,
+        Confidence values (negative and positive) to plot on the figure
+
+    Returns
+    -------
+        plotly.Figure
+    """
+    fig = px.scatter(data)
+    line_shapes = [
+        get_plotly_shape(-1, len(data), conf_value, conf_value, dash='dash', opacity=0.5),
+        get_plotly_shape(-1, len(data), -conf_value, -conf_value, dash='dash', opacity=0.5)
+    ]
+    for ind_d, d in enumerate(data):
+        line_shapes.append(
+            get_plotly_shape(ind_d, ind_d, min(d, 0), max(d, 0)))
+    fig.update_layout(shapes=line_shapes, showlegend=False, xaxis_title='Lags', yaxis_title=None, title = title)
+    fig.update_layout(xaxis_range=[-1, len(data)])
+    return fig
+
+
+def plot_acf(input_df: pd.DataFrame, col_name: str, nlags: int = 40, title: str = 'ACF'):
+    return plot_base_autocorrelation(acf(input_df[col_name], nlags=nlags), title=title)
+
+
+def plot_pacf(input_df: pd.DataFrame, col_name: str, nlags: int = 40, title: str = 'PACF'):
+    return plot_base_autocorrelation(pacf(input_df[col_name], nlags=nlags), title=title)
+

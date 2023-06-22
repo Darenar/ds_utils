@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union, List
 
 import numpy as np
 import pandas as pd
@@ -95,3 +95,26 @@ class EllipseShape:
         x = self.x_center + (self.width / 2) * np.cos(theta) * np.cos(angle_rad) - (self.height / 2) * np.sin(theta) * np.sin(angle_rad)
         y = self.y_center + (self.width / 2) * np.cos(theta) * np.sin(angle_rad) + (self.height / 2) * np.sin(theta) * np.cos(angle_rad)
         return x, y
+
+
+def winsorize(input_df: pd.DataFrame, columns: Union[str, List[str]], quantile: float = 0.99) -> pd.DataFrame:
+    """
+    Function to winsorize a dataframe columns based on the quantile.
+    Only upper winsorization is impllemented
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        Input dataframe which columns to winsorize
+    columns : Union[str, List[str]]
+        Column or a list of columns to winsorize
+    quantile : float, optional
+        Upper quantile to winsorize the column be, by default 0.99
+
+    Returns
+    -------
+    pd.DataFrame
+        Pandas datarame with the winsorized columns
+    """
+    input_df[columns] = input_df[columns].clip(upper=input_df[columns].quantile(quantile).tolist(), axis=1)
+    return input_df

@@ -1,123 +1,115 @@
-from typing import Union, List
-
-import numpy as np
 import pandas as pd
-from statsmodels.graphics.tsaplots import acf, pacf
-import plotly.express as px
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder
 
 from .base import BasePandasTransformer
 
 
-def calculate_pearson_correlation(input_df: pd.DataFrame, column_one: str, column_two: str, 
-                                  window: int = None, *args, **kwargs) -> Union[float, np.ndarray]:
-    if window:
-        return input_df[column_one].rolling(window=window, *args, **kwargs).corr(input_df[column_two])
-    return input_df[[column_one, column_two]].corr()[column_two].iloc[0]
-
-
-def search_for_optimal_lag(input_df: pd.DataFrame, column_one: str, column_two: str, max_abs_shift: int = 30) -> int:
-    best_shift = 0
-    best_corr = 0
-    for s in range(-max_abs_shift, max_abs_shift, 1):
-        shift_df = input_df[[column_one, column_two]].copy()
-        shift_df.loc[:, column_two] = shift_df[column_two].shift(s)
-        pearson_corr = calculate_pearson_correlation(shift_df, column_one, column_two)
-        if abs(pearson_corr) > best_corr:
-            best_corr = abs(pearson_corr)
-            best_shift = s
-    return best_shift
-
-
-def winsorize(input_df: pd.DataFrame, columns: Union[str, List[str]], quantile: float = 0.99) -> pd.DataFrame:
+def get_corr_by_rolling_window(input_df: pd.DataFrame, column_one: str, column_two: str, window_size: int, method: str = 'spearman'):
     """
-    Function to winsorize a dataframe columns based on the quantile.
-    Only upper winsorization is impllemented
+    Function to calculate rolling correlaton between two columns. 
+    Could not be done through pandas rolling functionality, as there is a bug with non-pearson method calcualtion. Thus, do it manually.
 
     Parameters
     ----------
     input_df : pd.DataFrame
-        Input dataframe which columns to winsorize
-    columns : Union[str, List[str]]
-        Column or a list of columns to winsorize
-    quantile : float, optional
-        Upper quantile to winsorize the column be, by default 0.99
+        Input dataframe with time-series
+    column_one : str
+        Feature one
+    column_two : str
+        Feature two
+    window_size : int
+        Window size to roll over
+    method : str, optional
+        Type of correlation to use according to pandas corr, by default 'spearman'
 
     Returns
     -------
     pd.DataFrame
-        Pandas datarame with the winsorized columns
+        Rolling correlation results as a pandas dataframe
     """
-    input_df[columns] = input_df[columns].clip(upper=input_df[columns].quantile(quantile).tolist(), axis=1)
-    return input_df
+    result_list = list()
+    for i in range(input_df.shape[0]):
+        # Mark as none the periods with low number of observations
+        if i < window_size-1:
+            result_list.append(None)
+            continue
+        start_index = i - window_size + 1
+        result_list.append(input_df.iloc[start_index:i][column_one].corr(
+            input_df.iloc[start_index:i][column_two], method=method
+        ))
+        print(result_list[-1])
+    return pd.DataFrame(result_list, index=input_df.index, columns=[method])
 
 
-def get_plotly_shape(x0: float, x1: float, y0: float, y1: float, dash: str = 'solid', opacity: float = 1) -> dict:
+def get_corr_by_shift(input_df: pd.DataFrame, column_one: str, column_two: str, max_abs_shift: int = 30, method: str = 'spearman') -> pd.DataFrame:
     """
-    Function to construct a plotly shape objects to be used in the Plotly figure
+    Function to calculate correlation values for different shift values. Similar to MatLab's XCORR functonality.
+    Negative shift means that the current ColumnOne affects future ColumnTwo.
 
     Parameters
     ----------
-    x0 : float
-        Lowest x value
-    x1 : float
-        Highest x value
-    y0 : float
-        Lowest y value
-    y1 : float
-        Highest y value
-    dash : str, optional
-        Type of the edge line to use, by default 'solid'
-    opacity : float, optional
-        Coefficient to control the opacity of the figure edges, by default 1
+    input_df : pd.DataFrame
+        Input dataframe with time-series
+    column_one : str
+        Feature one
+    column_two : str
+        Feature two
+    max_abs_shift : int, optional
+        Maximum absolute shift to be calculated from both sides, by default 30
+    method : str, optional
+        Type of correlation to use according to pandas corr, by default 'spearman'
 
     Returns
     -------
-    dict
-        Plotly shape dictionary
+    pd.DataFrame
+        Correlation results for different shift values
     """
-    return {'type': 'line', 'x0': x0, 'x1': x1, 'y0': y0, 'y1': y1, 
-            'line': dict(color='blue', width=1, dash=dash), 'opacity': opacity}
+    result_list = list()
+    for s in range(-max_abs_shift, max_abs_shift, 1):
+        shift_df = input_df[[column_one, column_two]].copy()
+        shift_df.loc[:, column_two] = shift_df[column_two].shift(s)
+        corr_value = shift_df[column_one].corr(shift_df[column_two], method=method)
+        result_list.append((s, corr_value))
+    return pd.DataFrame(result_list, columns=['shift', f'{method}_corr'])
 
 
-def plot_base_autocorrelation(data: np.ndarray, title: str = None, conf_value: float = 0.05):
+def rolling_optimal_shift(input_df: pd.DataFrame, column_one: str, column_two: str, window_size: int, method: str = 'spearman', max_abs_shift: int = 30):
     """
-    Function to plot value in the ACF, PACF formats.
-    Each value correspond to a dot with a vertical line to it. 
-    Automatically plots 
+    Calculate optimal shift that maximizes the correlation measure in a rollng window fashion.
     Parameters
     ----------
-    data : np.ndarray
-        Array with values to plot
-    title : str, optional
-        Title of the results figure, by default None
-    conf_value: float,
-        Confidence values (negative and positive) to plot on the figure
+    input_df : pd.DataFrame
+        Input dataframe with time-series
+    column_one : str
+        Feature one
+    column_two : str
+        Feature two
+    window_size : int
+        Window size to roll over
+    method : str, optional
+        Type of correlation to use according to pandas corr, by default 'spearman'
+    max_abs_shift : int, optional
+        Maximum absolute shift to be calculated from both sides, by default 30
 
     Returns
     -------
-        plotly.Figure
+    pd.DataFrame
+        Rolling correlation results with an optimal shift
     """
-    fig = px.scatter(data)
-    line_shapes = [
-        get_plotly_shape(-1, len(data), conf_value, conf_value, dash='dash', opacity=0.5),
-        get_plotly_shape(-1, len(data), -conf_value, -conf_value, dash='dash', opacity=0.5)
-    ]
-    for ind_d, d in enumerate(data):
-        line_shapes.append(
-            get_plotly_shape(ind_d, ind_d, min(d, 0), max(d, 0)))
-    fig.update_layout(shapes=line_shapes, showlegend=False, xaxis_title='Lags', yaxis_title=None, title = title)
-    fig.update_layout(xaxis_range=[-1, len(data)])
-    return fig
-
-
-def plot_acf(input_df: pd.DataFrame, col_name: str, nlags: int = 40, title: str = 'ACF'):
-    return plot_base_autocorrelation(acf(input_df[col_name], nlags=nlags), title=title)
-
-
-def plot_pacf(input_df: pd.DataFrame, col_name: str, nlags: int = 40, title: str = 'PACF'):
-    return plot_base_autocorrelation(pacf(input_df[col_name], nlags=nlags), title=title)
+    result_list = list()
+    for i in range(input_df.shape[0]):
+        if i < window_size-1:
+            result_list.append(None)
+            continue
+        start_index = i - window_size + 1
+        shift_df = get_corr_by_shift(input_df=input_df.iloc[start_index:i], column_one=column_one, 
+                                     column_two=column_two, max_abs_shift=max_abs_shift, 
+                                     method=method)
+        result_list.append(
+            shift_df.sort_values(f'{method}_corr', ascending=False)['shift'].iloc[0]
+        )
+    return pd.DataFrame(result_list, index=input_df.index, columns=[method])
 
 
 class SeasonalityRemover(BasePandasTransformer):
@@ -169,6 +161,9 @@ class SeasonalityRemover(BasePandasTransformer):
 
 
 class WeekDaySeasonRemover(SeasonalityRemover):
+    """
+    Class to remove WeekDay seasonality from the feature
+    """
     def extract_season(self, input_df: pd.DataFrame) -> pd.DataFrame:
         input_df[self.date_col] = pd.to_datetime(input_df[self.date_col])
         input_df.loc[:, self.season_col] = input_df[self.date_col].apply(lambda v: v.weekday)
@@ -185,6 +180,9 @@ class WeekDaySeasonRemover(SeasonalityRemover):
 
 
 class HourSeasonRemover(SeasonalityRemover):
+    """
+    Class to remove hour seasonality from the feature
+    """
     def extract_season(self, input_df: pd.DataFrame) -> pd.DataFrame:
         input_df.loc[:, self.season_col] = input_df[self.date_col].apply(lambda v: v.hour)
         return input_df
