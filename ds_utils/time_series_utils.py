@@ -38,7 +38,6 @@ def get_corr_by_rolling_window(input_df: pd.DataFrame, column_one: str, column_t
         result_list.append(input_df.iloc[start_index:i][column_one].corr(
             input_df.iloc[start_index:i][column_two], method=method
         ))
-        print(result_list[-1])
     return pd.DataFrame(result_list, index=input_df.index, columns=[method])
 
 
