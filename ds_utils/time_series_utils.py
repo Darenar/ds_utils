@@ -165,7 +165,7 @@ class WeekDaySeasonRemover(SeasonalityRemover):
     """
     def extract_season(self, input_df: pd.DataFrame) -> pd.DataFrame:
         input_df[self.date_col] = pd.to_datetime(input_df[self.date_col])
-        input_df.loc[:, self.season_col] = input_df[self.date_col].apply(lambda v: v.weekday)
+        input_df.loc[:, self.season_col] = input_df[self.date_col].apply(lambda v: v.weekday())
         input_df.loc[:, self.season_col] = input_df[self.season_col].map({
             0: 'monday',
             1: 'tuesday',

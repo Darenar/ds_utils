@@ -64,7 +64,7 @@ def plot_scatter_with_ellipse(input_df: pd.DataFrame, one_col_name: str, two_col
         Plotly scatter plot with a fitted ellipse
     """
     # Estimate an ellipse
-    title=f'Ellipse for {proportion} proportion {suffix}',
+    title=f'Ellipse for {proportion} proportion {suffix}'
     ellipse = EllipseShape.fit(input_df, one_col_name=one_col_name, two_col_name=two_col_name, proportion=proportion)
     boundary_x_array, boundary_y_array = ellipse.get_boundary_points()
     
@@ -73,7 +73,8 @@ def plot_scatter_with_ellipse(input_df: pd.DataFrame, one_col_name: str, two_col
     min_value = max(input_df[one_col_name].min(), input_df[two_col_name].min())
     layout = go.Layout(
         title=title,
-        xaxis=dict(title=one_col_name, range=[min_value, max_value * 1.05]),
+        xaxis=dict(title=one_col_name, 
+            range=[min_value, max_value * 1.05]),
         yaxis=dict(title=two_col_name, range=[min_value, max_value * 1.05]),
         showlegend=False
     )
